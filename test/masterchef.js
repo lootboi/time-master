@@ -518,4 +518,18 @@ describe("Masterchef", function() {
         expect(userInfo.amount).to.equal(0);
 
     })
+    it("Check set without ownership of MasterChef - Expect Fail", async function() {
+
+        // Add LP Pool
+        await masterChefContract.add(100, lpContract.address, 0, 3600, true, 3600);
+
+        // Attempt to set without ownership
+        try {
+            await masterChefContract.connect(addr1).set(0, 50, 0, 3600, true, 3600);
+        }
+        catch (error) {
+            expect(error.message).to.equal("VM Exception while processing transaction: reverted with reason string 'Ownable: caller is not the owner'");
+        }
+
+    });
 });

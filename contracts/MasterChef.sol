@@ -748,7 +748,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
         uint256 lastDepositTime; // when user deposited
 
         //
-        // We do some fancy math here. Basically, any point in time, the amount of ESI
+        // We do some fancy math here. Basically, any point in time, the amount of the Native token
         // entitled to a user but is pending to be distributed is:
         //
         //   pending reward = (user.amount * pool.accTokenPerShare) - user.rewardDebt
@@ -763,22 +763,22 @@ contract MasterChef is Ownable, ReentrancyGuard {
     // Info of each pool.
     struct PoolInfo {
         IERC20 lpToken;             // Address of LP token contract.
-        uint256 allocPoint;         // How many allocation points assigned to this pool. ESI to distribute per block.
-        uint256 lastRewardBlock;    // Last block number that ESI distribution occurs.
-        uint256 accTokenPerShare;   // Accumulated ESI per share, times 1e12. See below.
+        uint256 allocPoint;         // How many allocation points assigned to this pool. Native to distribute per block.
+        uint256 lastRewardBlock;    // Last block number that Native distribution occurs.
+        uint256 accTokenPerShare;   // Accumulated Native per share, times 1e12. See below.
         uint16 depositFeeBP;        // Deposit fee in basis points
         uint256 harvestInterval;    // Harvest interval in seconds
         uint256 withdrawLockPeriod; // lock period for this pool
         uint256 balance;            // pool token balance, allow multiple pools with same token
     }
 
-    // The ESI TOKEN!
+    // The Native TOKEN!
     IERC20 public token;
     // Dev address.
     address public devAddress;
     // Deposit Fee address
     address public feeAddress;
-    // ESI tokens created per block.
+    // Native tokens created per block.
     uint256 public tokenPerBlock;
     // Bonus muliplier for early token makers.
     uint256 public constant BONUS_MULTIPLIER = 1;
@@ -789,7 +789,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
     mapping(uint256 => mapping(address => UserInfo)) public userInfo;
     // Total allocation points. Must be the sum of all allocation points in all pools.
     uint256 public totalAllocPoint = 0;
-    // The block number when ESI mining starts.
+    // The block number when Native mining starts.
     uint256 public startBlock;
     uint256 public endBlock;
     // Total locked up rewards
@@ -844,7 +844,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
         }));
     }
 
-    // Update the given pool's ESI allocation point and deposit fee. Can only be called by the owner.
+    // Update the given pool's Native allocation point and deposit fee. Can only be called by the owner.
     function set(uint256 _pid, uint256 _allocPoint, uint16 _depositFeeBP, uint256 _harvestInterval, bool _withUpdate,
         uint256 _withdrawLockPeriod ) external onlyOwner {
         require(_depositFeeBP <= 400, "set: invalid deposit fee basis points");
@@ -869,7 +869,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
         return _to.sub(_from).mul(BONUS_MULTIPLIER);
     }
 
-    // View function to see pending ESI on frontend.
+    // View function to see pending Native on frontend.
     function pendingToken(uint256 _pid, address _user) public view returns (uint256) {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][_user];
@@ -885,7 +885,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
         return pending.add(user.rewardLockedUp);
     }
 
-    // View function to see if user can harvest ESI.
+    // View function to see if user can harvest Native.
     function canHarvest(uint256 _pid, address _user) public view returns (bool) {
         UserInfo storage user = userInfo[_pid][_user];
         return block.timestamp >= user.nextHarvestUntil;
@@ -918,7 +918,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
         pool.lastRewardBlock = myBlock;
     }
 
-    // Deposit LP tokens to MasterChef for ESI allocation.
+    // Deposit LP tokens to MasterChef for Native allocation.
     function deposit(uint256 _pid, uint256 _amount) external nonReentrant {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
@@ -981,7 +981,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
         emit EmergencyWithdraw(msg.sender, _pid, amount);
     }
 
-    // Pay or lockup pending ESI.
+    // Pay or lockup pending Native.
     function payOrLockupPendingToken(uint256 _pid) internal {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
@@ -1047,7 +1047,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
         allocated = allocated.add(amount);
         emit Mint(to, amount);
     }
-    // Safe token transfer function, just in case if rounding error causes pool to not have enough ESI.
+    // Safe token transfer function, just in case if rounding error causes pool to not have enough Native.
     function safeTokenTransfer(address _to, uint256 _amount) internal {
         uint256 tokenBal = token.balanceOf(address(this));
         if (_amount > tokenBal) {
