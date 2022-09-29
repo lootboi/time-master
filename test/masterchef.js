@@ -235,6 +235,84 @@ describe("Masterchef", function() {
         expect(await ethers.provider.getBalance(masterChefContract.address)).to.equal(0);
 
     });
+    it("Check that variable amounts of deposit can be deposited - Expect success", async function() {
+
+        // Add LP Pool
+        await masterChefContract.add(100, lpContract.address, 0, 3600, true, 3600);
+
+        // Deposit 1000 LP Tokens
+        await lpContract.approve(masterChefContract.address, ethers.utils.parseEther("1000"));
+        await masterChefContract.deposit(0, ethers.utils.parseEther("250"));
+
+        // Check that balances are correct
+        expect(await lpContract.balanceOf(owner.address)).to.equal(ethers.utils.parseEther("750"));
+        expect(await lpContract.balanceOf(masterChefContract.address)).to.equal(ethers.utils.parseEther("250"));
+
+        // Check that deposit info updated correctly for poolInfo
+        const depositInfo = await masterChefContract.userInfo(0, owner.address);
+        expect(depositInfo.amount).to.equal(ethers.utils.parseEther("250"));
+        expect(depositInfo.lastDepositTime).to.not.equal(0);
+
+        // Deposit 500 LP Tokens
+        await masterChefContract.deposit(0, ethers.utils.parseEther("500"));
+
+        // Check that balances are correct
+        expect(await lpContract.balanceOf(owner.address)).to.equal(ethers.utils.parseEther("250"));
+        expect(await lpContract.balanceOf(masterChefContract.address)).to.equal(ethers.utils.parseEther("750"));
+
+        // Check that deposit info updated correctly for poolInfo
+        const depositInfo2 = await masterChefContract.userInfo(0, owner.address);
+        expect(depositInfo2.amount).to.equal(ethers.utils.parseEther("750"));
+        expect(depositInfo2.lastDepositTime).to.not.equal(0);
+
+    });
+    it("Check that variable amounts of withdraw can be withdrawn", async function() {
+
+        // Add LP Pool
+        await masterChefContract.add(100, lpContract.address, 0, 3600, true, 3600);
+
+        // Deposit 1000 LP Tokens
+        await lpContract.approve(masterChefContract.address, ethers.utils.parseEther("1000"));
+        await masterChefContract.deposit(0, ethers.utils.parseEther("1000"));
+
+        // Check that balances are correct
+        expect(await lpContract.balanceOf(owner.address)).to.equal(0);
+        expect(await lpContract.balanceOf(masterChefContract.address)).to.equal(ethers.utils.parseEther("1000"));
+
+        // Check that deposit info updated correctly for poolInfo
+        const depositInfo = await masterChefContract.userInfo(0, owner.address);
+        expect(depositInfo.amount).to.equal(ethers.utils.parseEther("1000"));
+        expect(depositInfo.lastDepositTime).to.not.equal(0);
+
+        // Fast forward 1 hour
+        await ethers.provider.send("evm_increaseTime", [3600]);
+        await ethers.provider.send("evm_mine");
+
+        // Withdraw 500 LP Tokens
+        await masterChefContract.withdraw(0, ethers.utils.parseEther("500"));
+
+        // Check that balances are correct
+        expect(await lpContract.balanceOf(owner.address)).to.equal(ethers.utils.parseEther("500"));
+        expect(await lpContract.balanceOf(masterChefContract.address)).to.equal(ethers.utils.parseEther("500"));
+
+        // Check that deposit info updated correctly for poolInfo
+        const depositInfo2 = await masterChefContract.userInfo(0, owner.address);
+        expect(depositInfo2.amount).to.equal(ethers.utils.parseEther("500"));
+        expect(depositInfo2.lastDepositTime).to.not.equal(0);
+
+        // Withdraw 250 LP Tokens
+        await masterChefContract.withdraw(0, ethers.utils.parseEther("250"));
+
+        // Check that balances are correct
+        expect(await lpContract.balanceOf(owner.address)).to.equal(ethers.utils.parseEther("750"));
+        expect(await lpContract.balanceOf(masterChefContract.address)).to.equal(ethers.utils.parseEther("250"));
+
+        // Check that deposit info updated correctly for poolInfo
+        const depositInfo3 = await masterChefContract.userInfo(0, owner.address);
+        expect(depositInfo3.amount).to.equal(ethers.utils.parseEther("250"));
+        expect(depositInfo3.lastDepositTime).to.not.equal(0);
+
+    });
     it("Check that Ether can be withdrawn from contract as non-owner - Expect Fail", async function () {
 
         console.log("  Positive Scenerios:");
@@ -346,4 +424,98 @@ describe("Masterchef", function() {
         expect(await masterChefContract.feeAddress()).to.equal(owner.address);
     
     });
-})
+    it("Check withdrawal without a staked balance - Expect Fail", async function() {
+
+        // Add LP Pool
+        await masterChefContract.add(100, lpContract.address, 0, 3600, true, 3600);
+
+        // Check owner balance before withdraw
+        expect(await lpContract.balanceOf(owner.address)).to.equal(ethers.utils.parseEther("1000"));
+
+        // Attempt to withdraw 1000 LP Tokens
+        try {
+            await masterChefContract.withdraw(0, ethers.utils.parseEther("1000"));
+        }
+        catch (error) {
+            expect(error.message).to.equal("VM Exception while processing transaction: reverted with reason string 'withdraw: not good'");
+        }
+        await lpContract.transfer(addr1.address, ethers.utils.parseEther("500"));
+        await lpContract.connect(addr1).approve(masterChefContract.address, ethers.utils.parseEther("500"));
+        await masterChefContract.connect(addr1).deposit(0, ethers.utils.parseEther("500"));
+
+        // Attempt to withdraw when others are staked
+        try {
+            await masterChefContract.withdraw(0, 0);
+        }
+        catch (error) {
+            expect(error.message).to.equal("VM Exception while processing transaction: reverted with reason string 'withdraw: not good'");
+        }
+
+        // Check that the owners balance is still 500
+        expect(await lpContract.balanceOf(owner.address)).to.equal(ethers.utils.parseEther("500"));
+
+    });
+    it("Check withdraw more than staked balance - Expect fail", async function() {
+
+        // Add LP Pool
+        await masterChefContract.add(100, lpContract.address, 0, 3600, true, 3600);
+
+        // Deposit 1000 LP Tokens
+        await lpContract.approve(masterChefContract.address, ethers.utils.parseEther("1000"));
+        await masterChefContract.deposit(0, ethers.utils.parseEther("1000"));
+
+        // Check owner balance before withdraw
+        expect(await lpContract.balanceOf(owner.address)).to.equal(0);
+
+        // Fake time
+        await ethers.provider.send("evm_increaseTime", [3600]);
+        await ethers.provider.send("evm_mine");
+
+        // Attempt to withdraw 1001 LP Tokens
+        try {
+            await masterChefContract.withdraw(0, ethers.utils.parseEther("1001"));
+        }
+        catch (error) {
+            expect(error.message).to.equal("VM Exception while processing transaction: reverted with reason string 'withdraw: not good'");
+        }
+
+        await masterChefContract.withdraw(0, ethers.utils.parseEther("500"));
+        await lpContract.transfer(addr1.address, ethers.utils.parseEther("500"));
+        await lpContract.connect(addr1).approve(masterChefContract.address, ethers.utils.parseEther("500"));
+        await masterChefContract.connect(addr1).deposit(0, ethers.utils.parseEther("500"));
+
+        // Attempt to withdraw 501 LP Tokens
+        try {
+            await masterChefContract.withdraw(0, ethers.utils.parseEther("501"));
+        }
+        catch (error) {
+            expect(error.message).to.equal("VM Exception while processing transaction: reverted with reason string 'withdraw: not good'");
+        }
+
+        const depositInfoOwner = await masterChefContract.userInfo(0, owner.address);
+        const depositInfoAddr1 = await masterChefContract.userInfo(0, addr1.address);
+        expect(depositInfoOwner.amount).to.equal(ethers.utils.parseEther("500"));
+        expect(depositInfoAddr1.amount).to.equal(ethers.utils.parseEther("500"));
+        expect(await lpContract.balanceOf(owner.address)).to.equal(0);
+
+    });
+    it("Check deposit with no balance - Expect Fail", async function() {
+
+        // Add LP Pool
+        await masterChefContract.add(100, lpContract.address, 0, 3600, true, 3600);
+
+        // Attempt to deposit 1000 LP Tokens
+        try {
+            await lpContract.connect(addr1).approve(masterChefContract.address, ethers.utils.parseEther("1000"));
+            await masterChefContract.connect(addr1).deposit(0, ethers.utils.parseEther("1000"));
+        }
+        catch (error) {
+            expect(error.message).to.equal("VM Exception while processing transaction: reverted with panic code 0x11 (Arithmetic operation underflowed or overflowed outside of an unchecked block)");
+        }
+
+        // Check that userInfo was not incorrectly updated
+        const userInfo = await masterChefContract.userInfo(0, addr1.address);
+        expect(userInfo.amount).to.equal(0);
+
+    })
+});
