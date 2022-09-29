@@ -3,12 +3,13 @@ const hre = require("hardhat");
 async function initSmartContracts() {
 
   // Variables for MasterChef Deployment
-  var current = await hre.ethers.provider.getBlockNumber();
+  var currentBlock = await hre.ethers.provider.getBlockNumber();
+  var timestamp = (await hre.ethers.provider.getBlock(currentBlock)).timestamp;
   var emmissionPerBlock = ethers.utils.parseEther("0.5");
 
   const [owner, addr1, addr2] = await hre.ethers.getSigners();
 
-  // Deploy dETH
+  // Deploy Native
   contractFactory = await hre.ethers.getContractFactory("Native");
   const nativeContract = await contractFactory.deploy();
   await nativeContract.deployed();
@@ -25,7 +26,7 @@ async function initSmartContracts() {
 
   // Deploy MasterChef
   contractFactory = await hre.ethers.getContractFactory('MasterChef');
-  const masterChefContract = await contractFactory.deploy(nativeContract.address, current, emmissionPerBlock);
+  const masterChefContract = await contractFactory.deploy(nativeContract.address, timestamp, emmissionPerBlock);
   await masterChefContract.deployed();
 
   return [

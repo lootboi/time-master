@@ -18,7 +18,7 @@ describe("Masterchef", function() {
         expect(await masterChefContract.feeAddress()).to.equal(owner.address);
         
         // Check that initial values are correct
-        expect(await masterChefContract.tokenPerBlock()).to.equal(ethers.utils.parseEther("0.5")); 
+        expect(await masterChefContract.tokenPerSecond()).to.equal(ethers.utils.parseEther("0.5")); 
         expect(await masterChefContract.totalAllocPoint()).to.equal(0);
         expect(await masterChefContract.poolLength()).to.equal(0);
         expect(await masterChefContract.token()).to.equal(nativeContract.address); 
@@ -27,18 +27,18 @@ describe("Masterchef", function() {
     it("Check emissions are expected", async function() {
 
         // Add LP Pool
-        await masterChefContract.add(100, lpContract.address, 0, 3600, true, 3600);
+        await masterChefContract.add(100, lpContract.address, 0, 500, true, 500);
 
         // Deposit Native Tokens
         await nativeContract.transfer(masterChefContract.address, ethers.utils.parseEther("1000"));
 
         // Add Balance to LP Contract
-        const current = await hre.ethers.provider.getBlockNumber();
-        const endBlock = current + 1000;
-        await masterChefContract.addBalance(endBlock);
+        var currentBlock = await hre.ethers.provider.getBlockNumber();
+        var timestamp = (await hre.ethers.provider.getBlock(currentBlock)).timestamp;
+        await masterChefContract.addBalance(timestamp + 1000);
 
         // Check that deposit info updated correctly for poolInfo
-        const perBlockBig = await masterChefContract.tokenPerBlock();
+        const perBlockBig = await masterChefContract.tokenPerSecond();
         const perBlock = ethers.utils.formatEther(perBlockBig); 
         expect(String(perBlock)).to.be.a('string').and.satisfy(msg => msg.startsWith('1.00'));
         expect(await masterChefContract.treasure()).to.equal(ethers.utils.parseEther("1000"));
@@ -52,8 +52,7 @@ describe("Masterchef", function() {
         expect(await lpContract.balanceOf(owner.address)).to.equal(0);
 
         // Mine 1000 blocks +  to fake time passing
-        await helpers.mine(1000);
-        await ethers.provider.send("evm_increaseTime", [3600]);
+        await ethers.provider.send("evm_increaseTime", [1000]);
         await ethers.provider.send("evm_mine");
 
         // Withdraw 1000 LP Tokens from Stake
@@ -125,6 +124,29 @@ describe("Masterchef", function() {
         expect(await masterChefContract.feeAddress()).to.equal(addr1.address);
         
     });
+    it("Check set pool with ownership - Expect Success", async function() {
+
+        // Add LP Pool
+        await masterChefContract.add(100, lpContract.address, 0, 3600, true, 3600);
+
+        // Set pool
+        await masterChefContract.set(0, 200, 0, 3600, true, 3600);
+
+        // Check poolInfo updated correctly
+        const poolInfo = await masterChefContract.poolInfo(0);
+        expect(poolInfo.allocPoint).to.equal(200);
+        expect(poolInfo.accTokenPerShare).to.equal(0);
+        expect(poolInfo.lpToken).to.equal(lpContract.address);
+        expect(poolInfo.depositFeeBP).to.equal(0);
+        expect(poolInfo.harvestInterval).to.equal(3600);
+        expect(poolInfo.withdrawLockPeriod).to.equal(3600);
+        expect(poolInfo.balance).to.equal(0);
+
+        // Check that global variables updated correctly
+        expect(await masterChefContract.poolLength()).to.equal(1);
+        expect(await masterChefContract.totalAllocPoint()).to.equal(200);
+
+    });
     it("Check that deposit info updates correctly - Expect Success", async function () {
 
         // Add LP Pool
@@ -143,6 +165,51 @@ describe("Masterchef", function() {
         // Check that deposit info updated correctly for userInfo
         const userInfo = await masterChefContract.userInfo(0, owner.address);
         expect(userInfo.amount).to.equal(ethers.utils.parseEther("1000"));
+
+    });
+    it("Check that withdrawal lockup period and reward claim can be different - Expect Success", async function() {
+
+        // Add LP Pool
+        await masterChefContract.add(100, lpContract.address, 0, 86400, true, 604800);
+
+        // Deposit Native Tokens for Rewards
+        var block = await ethers.provider.getBlock();
+        var timestamp = block.timestamp;
+        await nativeContract.transfer(masterChefContract.address, ethers.utils.parseEther("1000"));
+        await masterChefContract.addBalance(timestamp + 2628000);
+
+        // Deposit 1000 LP Tokens
+        await lpContract.approve(masterChefContract.address, ethers.utils.parseEther("1000"));
+        await masterChefContract.deposit(0, ethers.utils.parseEther("1000"));
+
+        // Mine 1000 blocks +  to fake time passing
+        await ethers.provider.send("evm_increaseTime", [86400]);
+        await ethers.provider.send("evm_mine");
+
+        // Withdraw 1000 LP Tokens from Stake
+        await masterChefContract.withdraw(0, 0);
+
+        // Check that the owner now has 1000 LP Tokens + 1000 Native Tokens
+        expect(await lpContract.balanceOf(masterChefContract.address)).to.equal(ethers.utils.parseEther("1000"));
+        expect(await nativeContract.balanceOf(masterChefContract.address)).to.equal("967122882134000000000");
+        expect(await nativeContract.balanceOf(owner.address)).to.equal(ethers.utils.parseEther("9032.877117866"));
+
+        // Attempt to withdraw 1000 LP Tokens from Stake before withdraw lockup period
+        try {
+            await masterChefContract.withdraw(0, ethers.utils.parseEther("1000"));
+
+        }
+        catch (err) {
+            expect(err.message).to.equal("VM Exception while processing transaction: reverted with reason string 'withdraw still locked'");
+        }
+
+        // Fake 1 week passing
+        await ethers.provider.send("evm_increaseTime", [604800]);
+        await ethers.provider.send("evm_mine");
+
+        // Withdraw 1000 LP Tokens from Stake
+        await masterChefContract.withdraw(0, ethers.utils.parseEther("1000"));
+        expect(await lpContract.balanceOf(masterChefContract.address)).to.equal(0);
 
     });
     it("Attempt to withdraw after 1 hour - Expect success", async function() {
@@ -529,6 +596,20 @@ describe("Masterchef", function() {
         }
         catch (error) {
             expect(error.message).to.equal("VM Exception while processing transaction: reverted with reason string 'Ownable: caller is not the owner'");
+        }
+
+    });
+    it("Check set with invalid pool id - Expect Fail", async function() {
+
+        // Add LP Pool
+        await masterChefContract.add(100, lpContract.address, 0, 3600, true, 3600);
+
+        // Attempt to set with invalid pool id
+        try {
+            await masterChefContract.set(1, 50, 0, 3600, true, 3600);
+        }
+        catch (error) {
+            expect(error.message).to.equal("VM Exception while processing transaction: invalid opcode");
         }
 
     });

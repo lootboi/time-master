@@ -754,7 +754,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
         //   pending reward = (user.amount * pool.accTokenPerShare) - user.rewardDebt
         //
         // Whenever a user deposits or withdraws LP tokens to a pool. Here's what happens:
-        //   1. The pool's `accTokenPerShare` (and `lastRewardBlock`) gets updated.
+        //   1. The pool's `accTokenPerShare` (and `lastRewardTimestamp`) gets updated.
         //   2. User receives the pending reward sent to his/her address.
         //   3. User's `amount` gets updated.
         //   4. User's `rewardDebt` gets updated.
@@ -764,7 +764,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
     struct PoolInfo {
         IERC20 lpToken;             // Address of LP token contract.
         uint256 allocPoint;         // How many allocation points assigned to this pool. Native to distribute per block.
-        uint256 lastRewardBlock;    // Last block number that Native distribution occurs.
+        uint256 lastRewardTimestamp;    // Last block number that Native distribution occurs.
         uint256 accTokenPerShare;   // Accumulated Native per share, times 1e12. See below.
         uint16 depositFeeBP;        // Deposit fee in basis points
         uint256 harvestInterval;    // Harvest interval in seconds
@@ -779,7 +779,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
     // Deposit Fee address
     address public feeAddress;
     // Native tokens created per block.
-    uint256 public tokenPerBlock;
+    uint256 public tokenPerSecond;
     // Bonus muliplier for early token makers.
     uint256 public constant BONUS_MULTIPLIER = 1;
 
@@ -790,8 +790,8 @@ contract MasterChef is Ownable, ReentrancyGuard {
     // Total allocation points. Must be the sum of all allocation points in all pools.
     uint256 public totalAllocPoint = 0;
     // The block number when Native mining starts.
-    uint256 public startBlock;
-    uint256 public endBlock;
+    uint256 public startTimestamp;
+    uint256 public endTimestamp;
     // Total locked up rewards
     uint256 public totalLockedUpRewards;
 
@@ -804,12 +804,12 @@ contract MasterChef is Ownable, ReentrancyGuard {
 
     constructor(
         IERC20 _token,
-        uint256 _startBlock,
-        uint256 _tokenPerBlock
+        uint256 _startTimestamp,
+        uint256 _tokenPerSecond
     ) public {
         token = _token;
-        startBlock = _startBlock;
-        tokenPerBlock = _tokenPerBlock;
+        startTimestamp = _startTimestamp;
+        tokenPerSecond = _tokenPerSecond;
         token.balanceOf( address(this) );
         devAddress = msg.sender;
         feeAddress = msg.sender;
@@ -830,12 +830,12 @@ contract MasterChef is Ownable, ReentrancyGuard {
             massUpdatePools();
         }
         _lpToken.balanceOf(address(this)); // prevent adding invalid token.
-        uint256 lastRewardBlock = block.number > startBlock ? block.number : startBlock;
+        uint256 lastRewardTimestamp = block.timestamp > startTimestamp ? block.timestamp : startTimestamp;
         totalAllocPoint = totalAllocPoint.add(_allocPoint);
         poolInfo.push(PoolInfo({
         lpToken: _lpToken,
         allocPoint: _allocPoint,
-        lastRewardBlock: lastRewardBlock,
+        lastRewardTimestamp: lastRewardTimestamp,
         accTokenPerShare: 0,
         balance: 0,
         depositFeeBP: _depositFeeBP,
@@ -875,10 +875,10 @@ contract MasterChef is Ownable, ReentrancyGuard {
         UserInfo storage user = userInfo[_pid][_user];
         uint256 accTokenPerShare = pool.accTokenPerShare;
         uint256 lpSupply = pool.balance;
-        uint256 myBlock = (block.number <= endBlock ) ? block.number : endBlock;
-        if (myBlock > pool.lastRewardBlock && lpSupply != 0 ) {
-            uint256 multiplier = getMultiplier(pool.lastRewardBlock, myBlock);
-            uint256 tokenReward = multiplier.mul(tokenPerBlock).mul(pool.allocPoint).div(totalAllocPoint);
+        uint256 myTimestamp = (block.timestamp <= endTimestamp ) ? block.timestamp : endTimestamp;
+        if (myTimestamp > pool.lastRewardTimestamp && lpSupply != 0 ) {
+            uint256 multiplier = getMultiplier(pool.lastRewardTimestamp, myTimestamp);
+            uint256 tokenReward = multiplier.mul(tokenPerSecond).mul(pool.allocPoint).div(totalAllocPoint);
             accTokenPerShare = accTokenPerShare.add(tokenReward.mul(1e12).div(lpSupply));
         }
         uint256 pending = user.amount.mul(accTokenPerShare).div(1e12).sub(user.rewardDebt);
@@ -902,20 +902,20 @@ contract MasterChef is Ownable, ReentrancyGuard {
     // Update reward variables of the given pool to be up-to-date.
     function updatePool(uint256 _pid) public {
         PoolInfo storage pool = poolInfo[_pid];
-        uint256 myBlock = (block.number <= endBlock ) ? block.number : endBlock;
-        if (myBlock <= pool.lastRewardBlock) {
+        uint256 myTimestamp = (block.timestamp <= endTimestamp ) ? block.timestamp : endTimestamp;
+        if (myTimestamp <= pool.lastRewardTimestamp) {
             return;
         }
         uint256 lpSupply = pool.balance;
         if (lpSupply == 0 || pool.allocPoint == 0) {
-            pool.lastRewardBlock = myBlock;
+            pool.lastRewardTimestamp = myTimestamp;
             return;
         }
-        uint256 multiplier = getMultiplier(pool.lastRewardBlock, myBlock);
-        uint256 tokenReward = multiplier.mul(tokenPerBlock).mul(pool.allocPoint).div(totalAllocPoint);
+        uint256 multiplier = getMultiplier(pool.lastRewardTimestamp, myTimestamp);
+        uint256 tokenReward = multiplier.mul(tokenPerSecond).mul(pool.allocPoint).div(totalAllocPoint);
         mint(address(this), tokenReward);
         pool.accTokenPerShare = pool.accTokenPerShare.add(tokenReward.mul(1e12).div(lpSupply));
-        pool.lastRewardBlock = myBlock;
+        pool.lastRewardTimestamp = myTimestamp;
     }
 
     // Deposit LP tokens to MasterChef for Native allocation.
@@ -1025,22 +1025,22 @@ contract MasterChef is Ownable, ReentrancyGuard {
 
     uint256 public treasure;
     uint256 public allocated;
-    uint256 public blocks;
+    uint256 public rewardedSeconds;
     event Mint(address to,  uint256 amount);
     function addBalance(uint256 _endBlock) external onlyOwner {
-        require( _endBlock > block.number , "err start<=block");
-        require( _endBlock > endBlock , "err end block");
+        require( _endBlock > block.timestamp , "err start<=block");
+        require( _endBlock > endTimestamp , "err end block");
         uint256 _amount = token.balanceOf(address(this));
-        endBlock = _endBlock;
+        endTimestamp = _endBlock;
         treasure = treasure.add(_amount);
-        blocks = _endBlock - block.number;
-        tokenPerBlock = treasure.div(blocks);
-        startBlock = block.number;
+        rewardedSeconds = _endBlock - block.timestamp;
+        tokenPerSecond = treasure.div(rewardedSeconds);
+        startTimestamp = block.timestamp;
     }
     function mint(address to,  uint256 amount ) internal {
         if( amount > treasure ){
             // treasure is 0, stop emission.
-            tokenPerBlock = 0;
+            tokenPerSecond = 0;
             amount = treasure; // last mint
         }
         treasure = treasure.sub(amount);
@@ -1057,8 +1057,8 @@ contract MasterChef is Ownable, ReentrancyGuard {
         }
     }
 
-    function getBlock() public view returns (uint256) {
-        return block.number;
+    function getTimeStamp() public view returns (uint256) {
+        return block.timestamp;
     }
 
     function recoverTreasure( IERC20 recoverToken, uint256 amount) external onlyOwner{
@@ -1066,7 +1066,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
         for (uint256 pid = 1; pid < length; ++pid) {
             require(recoverToken != poolInfo[pid].lpToken,"can't transfer lp");
         }
-        require(block.number > endBlock, "can recover only after farming end.");
+        require(block.timestamp > endTimestamp, "can recover only after farming end.");
         // allow treasure to recover unused/lost funds
         recoverToken.transfer(devAddress, amount);
     }
