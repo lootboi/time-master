@@ -48,6 +48,16 @@ module.exports = {
   etherscan: {
     apiKey: API_KEY,
   },
+  customChains: [
+    {
+      network: "optimistic-goerli",
+      chainId: 420,
+      urls: {
+        apiURL: "https://opt-goerli.g.alchemy.com/v2/KwajuzZGGjgNFbcQYc6I83pSLZf7gz-G",
+        browserURL: "https://goerli-optimism.etherscan.io/"
+      }
+    }
+  ],
   networks: {
     rinkeby: {
       url: API_URL,
@@ -58,7 +68,7 @@ module.exports = {
       accounts: [process.env.PRIVATE_KEY],
     },
     "optimistic-goerli": {
-      url: "https://goerli.optimism.io",
+      url: "https://opt-goerli.g.alchemy.com/v2/KwajuzZGGjgNFbcQYc6I83pSLZf7gz-G",
       accounts: [process.env.PRIVATE_KEY],
     },
   },
