@@ -40,3 +40,7 @@ In order to deploy **you have to have your .env file setup**. After making sure 
 
 - ```mc_deploy.js``` This only deploys the masterchef contract
 - ```test_deploy.js``` This is an end to end test meant to be used to look for full functionality within the MasterChef contract. While it is useful to use this script on the local Hardhat environment, I would stress that using at least a testnet network is ideal for testing before production. This can be accessed by adding the spcific testnet you wish to use into the ```hardhat.config.js``` file then using the command ```npx hardhat scripts/test_deply.js --network <name of network>```
+
+## To Do
+- Correct functionality for programmatic contract verification on etherscan
+- Cleanup ```test_deploy.js```
