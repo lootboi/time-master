@@ -1,4 +1,4 @@
-# Time-based MasterChef
+# TimeMaster (Time Restricted MasterChef)
 
 This project includes an implmentation of a MasterChef contract that allows a deployer to control lockup periods for staked balances, as well as intervals in which users are allowed to collect rewards
 
